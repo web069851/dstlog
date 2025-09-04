@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Log Data Loader</title>
+</head>
+<body>
+    <p>Receiving data... this window should close automatically.</p>
+    <script>
+        try {
+            const hash = window.location.hash.substring(1);
+    
+            if (hash) {
+                const parts = hash.split('-', 3);
+                const taskId = parts[0];
+                const chunkIndex = parts[1];
+                const totalChunks = parts[2];
+
+
+                const metadataLength = taskId.length + chunkIndex.length + totalChunks.length + 3;
+                const chunkData = hash.substring(metadataLength);
+
+                if (taskId && chunkIndex && totalChunks && chunkData) {
+                    const key = `log_task_${taskId}_chunk_${chunkIndex}`;
+                    
+                    const value = JSON.stringify({
+                        total: parseInt(totalChunks, 10),
+                        data: chunkData
+                    });
+
+                    localStorage.setItem(key, value);
+                    console.log(`Stored chunk ${chunkIndex} for task ${taskId}.`);
+                }
+            }
+        } catch (e) {
+            console.error("Error in loader.html:", e);
+        } finally {
+            window.close();
+        }
+    </script>
+</body>
+</html>
