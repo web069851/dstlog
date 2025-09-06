@@ -77,6 +77,7 @@
                 headerDescription: "We have generated a recent error report. You can use the buttons below to copy the report or generate a shareable link to send to the corresponding mod developer for troubleshooting.",
                 copyButton: "Copy Report",
                 copyButtonSuccess: "Copied!",
+                copyFailed: "Copy failed. Your browser might not support this feature or permission was denied. Please copy the text manually.",
                 shareButton: "Get Sharable Link",
                 logLoading: "Initializing loader...",
                 logError: "Error: Failed to decode the final data.",
@@ -95,6 +96,7 @@
                 headerDescription: "我们生成了近期错误报告。你可以通过下方的按钮复制报告，或生成一个分享链接，并将其发送给对应的 Mod 开发者以协助定位问题。",
                 copyButton: "复制报告",
                 copyButtonSuccess: "已复制！",
+                copyFailed: "复制失败。您的浏览器可能不支持此功能或未授予权限，请手动复制文本。",
                 shareButton: "获取分享链接",
                 logLoading: "正在初始化加载器...",
                 logError: "错误：未能成功解码最终数据。",
@@ -144,6 +146,34 @@
 
             applyTranslations();
 
+            async function copyTextToClipboard(text) {
+                if (navigator.clipboard) {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        return true;
+                    } catch (err) {
+                        console.error('Failed to copy with navigator.clipboard:', err);
+                    }
+                }
+                let success = false;
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.top = '-9999px';
+                textArea.style.left = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    success = document.execCommand('copy');
+                } catch (err) {
+                    console.error('Failed to copy with execCommand:', err);
+                    success = false;
+                }
+                document.body.removeChild(textArea);
+                return success;
+            }
+
             function linkifyText(text) {
                 const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
                 const regex = /(workshop-\d+)/g;
@@ -154,24 +184,30 @@
                 });
             }
 
-            copyBtn.addEventListener('click', () => {
-                navigator.clipboard.writeText(logElement.textContent).then(() => {
+            copyBtn.addEventListener('click', async () => {
+                const success = await copyTextToClipboard(logElement.textContent);
+                if (success) {
                     copyBtn.textContent = T.copyButtonSuccess;
                     copyBtn.style.backgroundColor = '#28a745';
                     setTimeout(() => {
                         copyBtn.textContent = T.copyButton;
                         copyBtn.style.backgroundColor = '#007bff';
                     }, 1500);
-                }).catch(err => console.error('Copy failed', err));
+                } else {
+                    alert(T.copyFailed); 
+                }
             });
 
             function showModal() { infoModal.classList.add('visible'); }
             function hideModal() { infoModal.classList.remove('visible'); }
 
-            shareBtn.addEventListener('click', () => {
-                navigator.clipboard.writeText(logElement.textContent)
-                    .then(() => { showModal(); })
-                    .catch(err => { alert("无法自动复制文本！请手动复制。错误: " + err); });
+            shareBtn.addEventListener('click', async () => {
+                const success = await copyTextToClipboard(logElement.textContent);
+                if (success) {
+                    showModal();
+                } else {
+                    alert(T.copyFailed); 
+                }
             });
 
             confirmBtn.addEventListener('click', () => { window.open('https://pastebin.com', '_blank'); });
@@ -205,18 +241,14 @@
             const timeout = setTimeout(() => {
                 clearInterval(polling);
                 clearTimeout(slowNoticeHandle);
-                
                 const stillLoading = receivedCount < totalChunks || totalChunks === -1;
-                
                 if(stillLoading){
                     const timeoutMessage = (currentLang === 'zh') ? `错误：超时。最终收到 ${receivedCount} / ${totalChunks > 0 ? totalChunks : '未知'} 个数据块。` : `Error: Timed out. Received ${receivedCount} of ${totalChunks > 0 ? totalChunks : 'unknown'} chunks.`;
                     loadingStatusEl.textContent = timeoutMessage;
-                    
                     setTimeout(() => {
                         window.close();
-                    }, 10000); 
+                    }, 10000);
                 }
-                
                 cleanupTaskData(taskId, totalChunks > 0 ? totalChunks : 50);
             }, TIMEOUT);
 
@@ -233,9 +265,7 @@
                         }
                     }
                 }
-
                 if (totalChunks === -1) return;
-
                 receivedCount = 0;
                 for (let i = 1; i <= totalChunks; i++) {
                     if (!collectedChunks[i]) {
@@ -249,24 +279,20 @@
                         receivedCount++;
                     }
                 }
-                
                 if (Date.now() - pageLoadTime < SLOW_NOTICE_TIMEOUT) {
                     const progressMessage = (currentLang === 'zh') ? `加载中... 已收到 ${receivedCount} / ${totalChunks} 个数据块。` : `Loading... Received ${receivedCount} / ${totalChunks} chunks.`;
                     loadingStatusEl.textContent = progressMessage;
                 }
-
                 if (receivedCount === totalChunks) {
                     clearInterval(polling);
                     clearTimeout(timeout);
                     clearTimeout(slowNoticeHandle);
                     const successMessage = (currentLang === 'zh') ? "所有数据块已收到，正在组合..." : "All chunks received. Assembling...";
                     loadingStatusEl.textContent = successMessage;
-
                     let fullBase64 = "";
                     for (let i = 1; i <= totalChunks; i++) {
                         fullBase64 += collectedChunks[i];
                     }
-
                     try {
                         const decodedText = decodeURIComponent(escape(window.atob(fullBase64)));
                         const linkifiedHtml = linkifyText(decodedText);
